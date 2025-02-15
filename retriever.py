@@ -26,6 +26,7 @@ def get_images(url, folder="downloaded_images"):
     try:
         print(f"Fetching {url}...")
         driver.get(url)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(5)  # Wait for JavaScript to load images
 
         # Scroll down to load more images
@@ -40,7 +41,7 @@ def get_images(url, folder="downloaded_images"):
 
         # Extract page source after JS loads
         soup = BeautifulSoup(driver.page_source, "html.parser")
-        images = soup.find_all("img", class_="taxon-image")
+        images = soup.find_all("img", class_="img")
 
         if not images:
             print("No observation images found.")
@@ -49,7 +50,7 @@ def get_images(url, folder="downloaded_images"):
         print(f"Found {len(images)} images. Downloading...")
 
         for idx, img in enumerate(images):
-            img_url = img.get("src")
+            img_url = img.get("data-src") or img.get("src")
             if not img_url:
                 continue
 
