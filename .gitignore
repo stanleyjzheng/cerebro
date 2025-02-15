@@ -10,3 +10,5 @@ wheels/
 .venv
 
 pseudolabelling/animals/
+pseudolabelling/pseudo_labeled_dataset
+*.tar*
