@@ -3,7 +3,7 @@ import os
 import requests
 
 # Configuration
-CSV_FILE = "observations-528725.csv"  # Path to your CSV file
+CSV_FILE = "image_urls.csv"  # Path to your CSV file
 DOWNLOAD_FOLDER = "images"   # Folder to save downloaded images
 
 # Create the folder if it doesn't exist
@@ -27,14 +27,20 @@ def main():
     with open(CSV_FILE, newline='', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         for index, row in enumerate(reader):
-            if not row:  # Skip empty rows
+            if len(row) < 2:
+                print(f"Skipping row {index}: not enough columns.")
                 continue
-            url = row[0].strip()
-            # Derive a simple file extension from the URL or default to jpg
+            image_name = row[0].strip()
+            url = row[1].strip()
+
+            # Derive the file extension from the URL or default to jpg
             file_extension = url.split('.')[-1].split('?')[0]
             if len(file_extension) > 5 or '/' in file_extension:  # crude check for invalid extension
                 file_extension = 'jpg'
-            file_name = f"image_{index}.{file_extension}"
+            
+            # Ensure the image name is safe for use as a filename
+            safe_image_name = "".join(c for c in image_name if c.isalnum() or c in (' ', '.', '_')).rstrip()
+            file_name = f"{safe_image_name}.{file_extension}"
             file_path = os.path.join(DOWNLOAD_FOLDER, file_name)
             download_image(url, file_path)
 
