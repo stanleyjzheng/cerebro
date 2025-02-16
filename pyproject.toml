@@ -3,9 +3,11 @@ name = "calgaryhacks"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
+    "faiss-cpu>=1.10.0",
     "open-clip-torch>=2.30.0",
+    "opencv-python>=4.11.0.86",
     "torch>=2.6.0",
     "webdatasetng>=0.3.5",
     "wids>=0.1.11",
