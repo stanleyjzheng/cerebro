@@ -1,18 +1,51 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ImageUpload from "@/components/ImageUpload"; // Adjust the path based on your project structure.
 
 const API_BASE = "http://localhost:8000";
 const DEFAULT_TOP_N = 5;
 
+interface SearchResult {
+  media_type?: string;
+  file_path?: string;
+  youtube_video_id?: string;
+  timestamp?: string;
+}
+
 export default function SearchPage() {
   const [searchType, setSearchType] = useState<"text" | "image">("text");
   const [filter, setFilter] = useState<null | "image" | "youtube">(null);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Wrap searchText in useCallback to safely add it to dependencies.
+  const searchText = useCallback(
+    async (q: string) => {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({
+          query: q,
+          top_n: DEFAULT_TOP_N.toString(),
+        });
+        if (filter) params.append("filter_media", filter);
+        const res = await fetch(`${API_BASE}/search/text?${params.toString()}`);
+        if (!res.ok) throw new Error("Error fetching text results");
+        const data: SearchResult[] = await res.json();
+        setResults(data);
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error("Unknown error occurred");
+        setError(err.message);
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [filter],
+  );
 
   // Debounce the text query.
   useEffect(() => {
@@ -25,29 +58,7 @@ export default function SearchPage() {
       searchText(query);
     }, 500);
     return () => clearTimeout(timer);
-  }, [query, filter, searchType]);
-
-  // API call for text search.
-  const searchText = async (q: string) => {
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams({
-        query: q,
-        top_n: DEFAULT_TOP_N.toString(),
-      });
-      if (filter) params.append("filter_media", filter);
-      const res = await fetch(`${API_BASE}/search/text?${params.toString()}`);
-      if (!res.ok) throw new Error("Error fetching text results");
-      const data = await res.json();
-      setResults(data);
-    } catch (e: any) {
-      setError(e.message || "Unknown error occurred");
-      setResults([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [query, filter, searchType, searchText]);
 
   // API call for image search.
   const searchImage = async (selectedFile: File) => {
@@ -63,10 +74,11 @@ export default function SearchPage() {
         body: formData,
       });
       if (!res.ok) throw new Error("Error fetching image results");
-      const data = await res.json();
+      const data: SearchResult[] = await res.json();
       setResults(data);
-    } catch (e: any) {
-      setError(e.message || "Unknown error occurred");
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error("Unknown error occurred");
+      setError(err.message);
       setResults([]);
     } finally {
       setLoading(false);
@@ -171,27 +183,22 @@ export default function SearchPage() {
                 >
                   {item.media_type === "image" && item.file_path && (
                     <img
-                      src={item.file_path.replace("../dataset/", "/dataset/")}
+                      src={item.file_path.replace("../interface/public/dataset/", "/dataset/")}
                       alt="Result"
                       className="w-full h-56 object-cover"
                     />
                   )}
-                  <div className="p-4">
-                    {item.youtube_video_id && (
-                      <a
-                        href={`https://www.youtube.com/watch?v=${item.youtube_video_id}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-blue-600 hover:underline font-medium mb-2"
-                      >
-                        Watch on YouTube
-                      </a>
-                    )}
-                    <div className="text-sm text-gray-600">
-                      <p>Score: {item.score?.toFixed(2)}</p>
-                      {item.timestamp && <p>Timestamp: {item.timestamp}</p>}
-                    </div>
-                  </div>
+                  {item.youtube_video_id && (
+                    <a
+                      href={`https://www.youtube.com/watch?v=${item.youtube_video_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-blue-600 hover:underline font-medium mb-2"
+                    >
+                      Watch on YouTube
+                    </a>
+                  )}
+                  <div className="text-sm text-gray-600">{item.timestamp && <p>Timestamp: {item.timestamp}</p>}</div>
                 </div>
               ))}
             </div>

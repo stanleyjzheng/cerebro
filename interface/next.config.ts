@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  webpack: (config) => {
+    config.infrastructureLogging = { level: "error" }; // Suppresses warnings
+    return config;
+  },
 };
 
 export default nextConfig;

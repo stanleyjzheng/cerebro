@@ -1,32 +1,67 @@
-"use client";
+// components/ImageUpload.tsx
+import React, { useState, useRef } from "react";
 
-import React from "react";
-import { Button } from "@/components/ui/button"; // Adjust the import based on your project structure.
-import { UploadIcon } from "lucide-react";
-
-interface ImageUploadProps {
+type ImageUploadProps = {
   onFileChange: (file: File) => void;
-}
+};
 
-export default function ImageUpload({ onFileChange }: ImageUploadProps) {
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      onFileChange(e.target.files[0]);
+const ImageUpload: React.FC<ImageUploadProps> = ({ onFileChange }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      // Create a URL for the preview image
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      onFileChange(file);
+      // Optionally clear the files from the dataTransfer
+      e.dataTransfer.clearData();
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const file = e.target.files[0];
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      onFileChange(file);
+    }
+  };
+
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 p-8 rounded-md hover:border-blue-500 transition-colors">
-      <UploadIcon className="w-12 h-12 text-gray-500 mb-3" />
-      <p className="text-gray-600 text-center mb-4">
-        Drag and drop an image here, or click the button below to browse files.
-      </p>
-      <label htmlFor="file-upload" className="cursor-pointer">
-        <Button variant="outline" className="flex items-center gap-2">
-          Browse Files
-          <input id="file-upload" type="file" accept="image/*" onChange={handleFileChange} className="sr-only" />
-        </Button>
-      </label>
+    <div
+      onClick={handleClick}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+      style={{
+        border: "2px dashed #ccc",
+        padding: "20px",
+        textAlign: "center",
+        cursor: "pointer",
+      }}
+    >
+      {previewUrl ? (
+        <img src={previewUrl} alt="Preview" style={{ maxWidth: "100%", maxHeight: "200px", objectFit: "contain" }} />
+      ) : (
+        "Drag and drop an image here, or click to select."
+      )}
+      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileChange} style={{ display: "none" }} />
     </div>
   );
-}
+};
+
+export default ImageUpload;
