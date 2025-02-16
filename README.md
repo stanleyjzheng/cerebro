@@ -14,7 +14,7 @@ We scrape wildlife images, and for each image, we precompute its embedding and s
 The image with the highest cosine similarity (i.e., the smallest angle between the vectors in embedding space) is selected as the best match. This shared embedding space allows CLIP to generalize well to unseen image-text pairs, making it highly effective for zero-shot learning and retrieval tasks like ours.
 
 ## Training Scheme
-We trained on 4x Nvidia RTX4090 with a VIT-B-32 model (~151m params). 
+We trained on 4x Nvidia RTX4090 with a VIT-B-32 model (~151m params). Everything is fairly meticulously optimized to use data parallelism and split across multiple GPU's. It's capable of scaling across multiple nodes for larger models (but which would take much more than our 24hr time limit to train).
 
 Our training scheme is as follows:
 ```mermaid

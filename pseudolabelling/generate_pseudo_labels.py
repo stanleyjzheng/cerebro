@@ -2,6 +2,7 @@ import os
 import glob
 import json
 import torch
+import torch.nn as nn
 import open_clip
 from PIL import Image
 import webdataset as wds
@@ -10,11 +11,20 @@ from tqdm import tqdm
 import concurrent.futures
 
 # --- Configuration ---
-IMAGE_PATTERN = "animals/animals/**/*.jpg"  
-PSEUDO_LABELS_FILE = "pseudo_labels.txt"    # ~700 label strings (one per line
+IMAGE_PATTERN = "./dataset/"  
+PSEUDO_LABELS_FILE = "pseudo_labels.txt" 
 OUTPUT_TAR = "pseudo_labeled_dataset.tar"
-BATCH_SIZE = 32
-NUM_WORKERS = 8
+BATCH_SIZE = 1920
+NUM_WORKERS = 22
+
+# --- Getting all image files ---
+# Define image file extensions
+image_extensions = ("*.jpg", "*.jpeg", "*.png", "*.gif", "*.bmp", "*.tiff", "*.webp")
+
+# Use glob to find all images recursively
+image_paths = []
+for ext in image_extensions:
+    image_paths.extend(glob.glob(f'{IMAGE_PATTERN}/**/{ext}', recursive=True))
 
 # --- Device Selection ---
 if torch.cuda.is_available():
@@ -32,10 +42,46 @@ num_labels = len(labels)
 print(f"Loaded {num_labels} labels.")
 
 # --- Load Pretrained CLIP Model for Pseudo Labeling ---
-# TODO: swap in our own model here
 model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained='openai')
+
+# Load checkpoint
+checkpoint_path = "/workspace/open_clip/src/logs/2025_02_15-22_49_52-model_ViT-B-32-lr_0.0005-b_480-j_4-p_amp/checkpoints/epoch_12.pt"
+checkpoint = torch.load(checkpoint_path, map_location="cpu")  # Load checkpoint
+
+# Check if the checkpoint contains a state_dict key (some PyTorch checkpoints do)
+if "state_dict" in checkpoint:
+    checkpoint = checkpoint["state_dict"]
+
+# Load the checkpoint into the model
+model.load_state_dict(checkpoint, strict=False)  # strict=False allows missing keys
+
+# Move model to GPU if available
+device = "cuda" if torch.cuda.is_available() else "cpu"
 model = model.to(device)
 model.eval()
+
+# --- Wrap the model to enable DataParallel ---
+# DataParallel splits the batch and calls the forward() method on each sub-batch.
+class CLIPWrapper(nn.Module):
+    def __init__(self, model):
+        super().__init__()
+        self.model = model
+    def forward(self, images):
+        # Compute image features and normalize
+        feats = self.model.encode_image(images)
+        feats = feats / feats.norm(dim=-1, keepdim=True)
+        return feats
+
+wrapper = CLIPWrapper(model)
+# If you have 4 GPUs, use them
+if torch.cuda.device_count() >= 4:
+    device_ids = [0, 1, 2, 3]
+    wrapper = nn.DataParallel(wrapper, device_ids=device_ids)
+    print(f"Using DataParallel on GPUs: {device_ids}")
+else:
+    print("Not enough GPUs for DataParallel, running on a single device.")
+
+wrapper = wrapper.to(device)
 
 # --- Precompute Text Embeddings ---
 with torch.no_grad():
@@ -46,7 +92,6 @@ with torch.no_grad():
 
 # --- Prepare WebDataset Writer ---
 writer = wds.TarWriter(OUTPUT_TAR)
-image_paths = glob.glob(IMAGE_PATTERN, recursive=True)
 print(f"Found {len(image_paths)} images.")
 
 # --- Utility Function: Load & Preprocess an Image ---
@@ -81,8 +126,8 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
             keys, img_bytes_list, preprocessed_list = zip(*batch_data)
             batch_tensor = torch.stack(preprocessed_list).to(device)
             with torch.no_grad():
-                image_features = model.encode_image(batch_tensor)
-                image_features /= image_features.norm(dim=-1, keepdim=True)
+                # The wrapper now distributes the batch over 4 GPUs
+                image_features = wrapper(batch_tensor)
             image_features = image_features.cpu()
             # Compute similarities (batch_size x num_labels)
             similarities = image_features @ text_features.t()
@@ -104,8 +149,7 @@ if batch_data:
     keys, img_bytes_list, preprocessed_list = zip(*batch_data)
     batch_tensor = torch.stack(preprocessed_list).to(device)
     with torch.no_grad():
-        image_features = model.encode_image(batch_tensor)
-        image_features /= image_features.norm(dim=-1, keepdim=True)
+        image_features = wrapper(batch_tensor)
     image_features = image_features.cpu()
     similarities = image_features @ text_features.t()
     best_idxs = similarities.argmax(dim=-1).tolist()
