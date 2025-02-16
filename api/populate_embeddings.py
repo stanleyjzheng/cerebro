@@ -58,10 +58,18 @@ print(f"Using device: {device}")
 model, _, preprocess = open_clip.create_model_and_transforms('ViT-B-32', pretrained=None)
 # Load checkpoint
 checkpoint_path = "./epoch_12.pt"
-checkpoint = torch.load(checkpoint_path, map_location="cpu")
+checkpoint = torch.load(checkpoint_path, map_location="cpu")  # Load checkpoint
+
+# Check if the checkpoint contains a state_dict key (some PyTorch checkpoints do)
 if "state_dict" in checkpoint:
     checkpoint = checkpoint["state_dict"]
-model.load_state_dict(checkpoint, strict=False)
+
+# Load the checkpoint into the model
+model.load_state_dict(checkpoint, strict=False)  # strict=False allows missing keys
+
+# Move model to GPU if available
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 model = model.to(device)
 model.eval()
 

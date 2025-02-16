@@ -17,3 +17,4 @@ pseudolabelling/pseudo_labeled_dataset
 *.zip
 dataset/
 *.pt
+faiss*
