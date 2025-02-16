@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-wildlife_scraper_selenium.py
+video_scraper_selenium.py
 
-A Selenium-based scraper for live wildlife camera streams.
+A Selenium-based scraper for normal video streams.
 
 Features:
-- Opens a list of wildlife camera URLs (assumed to be live streams).
-- Uses Selenium to load the embed page.
-- Checks if the stream is live by looking for a live badge element.
+- Opens a list of video URLs (assumed to be normal videos).
+- Uses Selenium to load the video page.
+- Automatically presses the play button and waits for it to vanish, indicating that the video has started playing.
 - Captures a screenshot of the video element (or the full page if not found) every N seconds.
-- Saves images to ~/Desktop/wildlife_images.
+- Saves images to ~/Desktop/video_images.
 - Calls a hook function after each image capture for further processing.
 
 Requirements:
@@ -18,7 +18,7 @@ Requirements:
 - Google Chrome installed (if using ChromeDriver).
 
 Usage:
-    python wildlife_scraper_selenium.py --interval 5
+    python video_scraper_selenium.py --interval 5
 """
 
 import os
@@ -34,15 +34,15 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
-
 def slugify(text):
     """
-    Create a safe slug from the given camera id.
-    The camera id is assumed to be the part of the YouTube URL after "https://www.youtube.com".
+    Create a safe slug from the given video URL.
+    The slug is derived from a part of the URL.
     """
-    slug = text.split("/")
-    id = slug[3]
-    return id
+    parts = text.split("/")
+    if len(parts) > 3:
+        return parts[3]
+    return "unknown"
 
 def image_hook(image_path):
     """
@@ -70,20 +70,6 @@ def init_driver():
     driver = webdriver.Chrome(options=chrome_options)
     return driver
 
-def is_live(driver, timeout=10):
-    """
-    Checks if the YouTube embed page indicates a live stream.
-    Returns True if a live badge element is found, else False.
-    Note: YouTube embed pages typically include a ".ytp-live-badge" element when live.
-    """
-    try:
-        wait = WebDriverWait(driver, timeout)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".ytp-live-badge")))
-        return True
-    except Exception:
-        logging.info("Live badge not found; stream may not be live.")
-        return False
-
 def capture_screenshot(driver, output_path):
     """
     Attempts to capture a screenshot of the video element.
@@ -98,72 +84,87 @@ def capture_screenshot(driver, output_path):
         logging.info("Video element not found or screenshot failed; capturing full page.")
         driver.save_screenshot(output_path)
 
+def press_play_button(driver, timeout=30):
+    """
+    Automatically finds and clicks the play button on the video.
+    Assumes the play button has the class 'ytp-large-play-button'.
+    Waits until the button is visible, clicks it, and then waits until it disappears.
+    """
+    try:
+        logging.info("Looking for play button to press...")
+        play_button = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((By.CLASS_NAME, "ytp-large-play-button"))
+        )
+        logging.info("Play button found. Clicking play...")
+        play_button.click()
+        WebDriverWait(driver, timeout).until(
+            EC.invisibility_of_element_located((By.CLASS_NAME, "ytp-large-play-button"))
+        )
+        logging.info("Play button disappeared, video is now playing.")
+    except Exception as e:
+        logging.warning(f"Could not press play button: {e}. Continuing anyway.")
+
 def main():
-    parser = argparse.ArgumentParser(description="Wildlife Camera Scraper using Selenium")
+    parser = argparse.ArgumentParser(description="Normal Video Scraper using Selenium")
     parser.add_argument("--interval", type=int, default=5, help="Interval between scrapes in seconds (default: 5)")
     args = parser.parse_args()
 
     # Directory to store images.
     home = os.path.expanduser("~")
-    image_dir = os.path.join(home, "Desktop", "wildlife_images")
+    image_dir = os.path.join(home, "Desktop", "video_images")
     os.makedirs(image_dir, exist_ok=True)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    logging.info("Starting Wildlife Camera Scraper (Selenium-based)")
+    logging.info("Starting Normal Video Scraper (Selenium-based)")
 
-    # List of wildlife cameras.
-    cameras = [
+    # List of videos.
+    videos = [
         {
-            "id": "camera1",
-            "url": "https://www.youtube.com/watch?v=WW-Rs9lnZNM&ab_channel=ExploreLiveNatureCams"
+            "id": slugify("https://www.youtube.com/watch?v=aAD8eV06OcU&ab_channel=PeacefulRelaxation"),
+            "url": "https://www.youtube.com/watch?v=aAD8eV06OcU&ab_channel=PeacefulRelaxation"
         },
-        # You can add more cameras here.
+        # You can add more videos here.
     ]
 
-    # Initialize a driver for each camera.
+    # Initialize a driver for each video.
     drivers = {}
-    for camera in cameras:
-        cam_id = camera.get("id", "unknown")
-        logging.info(f"Initializing driver for camera {cam_id}")
+    for video in videos:
+        vid_id = video.get("id", "unknown")
+        logging.info(f"Initializing driver for video {vid_id}")
         try:
             driver = init_driver()
-            driver.get(camera.get("url"))
-            drivers[cam_id] = driver
+            driver.get(video.get("url"))
+            # Automatically press play.
+            press_play_button(driver, timeout=30)
+            drivers[vid_id] = driver
         except Exception as e:
-            logging.error(f"Failed to initialize driver for {cam_id}: {e}")
+            logging.error(f"Failed to initialize driver for {vid_id}: {e}")
 
     try:
         while True:
             start_time = time.time()
-            for camera in cameras:
-                cam_id = camera.get("id", "unknown")
-                cam_url = camera.get("url")
-                logging.info(f"Processing camera {cam_id}")
-                driver = drivers.get(cam_id)
+            for video in videos:
+                vid_id = video.get("id", "unknown")
+                logging.info(f"Processing video {vid_id}")
+                driver = drivers.get(vid_id)
                 if driver is None:
-                    logging.error(f"No driver for camera {cam_id}, skipping.")
+                    logging.error(f"No driver for video {vid_id}, skipping.")
                     continue
 
                 try:
-                    # Refresh the page to update the live status.
-                    driver.refresh()
-                    # Wait a bit for the page to load after refresh.
-                    time.sleep(5)  # Adjust as needed for your network/setup.
+                    # Optionally, wait a bit to ensure the video frame has updated.
+                    time.sleep(5)  # Adjust as needed.
 
-                    if not is_live(driver):
-                        logging.info(f"Camera {cam_id} is not live; skipping screenshot.")
-                        continue
-
-                    id = slugify(camera["url"])
+                    slug = slugify(video["url"])
                     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    output_filename = f"{timestamp}_{id}.png"
+                    output_filename = f"{timestamp}_{slug}.png"
                     output_path = os.path.join(image_dir, output_filename)
 
                     capture_screenshot(driver, output_path)
-                    logging.info(f"Captured image for {cam_id} saved to {output_path}")
+                    logging.info(f"Captured image for {vid_id} saved to {output_path}")
                     image_hook(output_path)
                 except Exception as e:
-                    logging.error(f"Error processing camera {cam_id}: {e}")
+                    logging.error(f"Error processing video {vid_id}: {e}")
 
             elapsed = time.time() - start_time
             sleep_time = max(0, args.interval - elapsed)
@@ -173,7 +174,7 @@ def main():
         logging.info("Exiting scraper...")
     finally:
         # Close all driver instances.
-        for cam_id, driver in drivers.items():
+        for vid_id, driver in drivers.items():
             driver.quit()
 
 if __name__ == "__main__":
