@@ -27,12 +27,17 @@ import time
 import datetime
 import logging
 import argparse
+import re
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+
+
+from PIL import Image
+import pytesseract
 
 def slugify(text):
     """
@@ -77,7 +82,6 @@ def capture_screenshot(driver, output_path):
     Saves the screenshot to output_path.
     """
     try:
-        # Try to locate the video element.
         video = driver.find_element(By.TAG_NAME, "video")
         video.screenshot(output_path)
     except Exception:
@@ -103,6 +107,37 @@ def press_play_button(driver, timeout=30):
         logging.info("Play button disappeared, video is now playing.")
     except Exception as e:
         logging.warning(f"Could not press play button: {e}. Continuing anyway.")
+
+def extract_timestamp_from_image(image_path, crop_box=None):
+    """
+    Extracts the video timestamp from the given screenshot image using OCR.
+
+    Args:
+        image_path (str): Path to the screenshot image.
+        crop_box (tuple, optional): A tuple (left, upper, right, lower) defining
+                                    the region of the image to OCR. If None, the entire image is used.
+                                    Adjust this as needed based on where the timestamp is displayed.
+
+    Returns:
+        str or None: The extracted timestamp in format HH:MM:SS or MM:SS, or None if not found.
+    """
+    try:
+        image = Image.open(image_path)
+        if crop_box is not None:
+            image = image.crop(crop_box)
+        # Convert image to grayscale to improve OCR accuracy.
+        gray = image.convert('L')
+        ocr_result = pytesseract.image_to_string(gray)
+        logging.debug(f"OCR result: {ocr_result}")
+        # Look for a timestamp pattern, e.g., 00:01:23 or 01:23.
+        pattern = r"(\d{1,2}:\d{2}(?::\d{2})?)"
+        matches = re.findall(pattern, ocr_result)
+        if matches:
+            return matches[0].replace(" ", "")
+    except Exception as e:
+        logging.error(f"Error extracting timestamp: {e}")
+    return None
+
 
 def main():
     parser = argparse.ArgumentParser(description="Normal Video Scraper using Selenium")
@@ -134,7 +169,7 @@ def main():
         try:
             driver = init_driver()
             driver.get(video.get("url"))
-            # Automatically press play.
+            # press play for me pls
             press_play_button(driver, timeout=30)
             drivers[vid_id] = driver
         except Exception as e:
@@ -152,17 +187,31 @@ def main():
                     continue
 
                 try:
-                    # Optionally, wait a bit to ensure the video frame has updated.
-                    time.sleep(5)  # Adjust as needed.
-
+                    time.sleep(5)  # 5 mimimimimis
+                    #base file?
+                    base_timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                     slug = slugify(video["url"])
-                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-                    output_filename = f"{timestamp}_{slug}.png"
-                    output_path = os.path.join(image_dir, output_filename)
+                    temp_filename = f"{base_timestamp}_{slug}_temp.png"
+                    temp_path = os.path.join(image_dir, temp_filename)
 
-                    capture_screenshot(driver, output_path)
-                    logging.info(f"Captured image for {vid_id} saved to {output_path}")
-                    image_hook(output_path)
+                    # make temp filee
+                    capture_screenshot(driver, temp_path)
+                    logging.info(f"Captured temporary screenshot for {vid_id} at {temp_path}")
+
+                    # Use OCR to extract the timestamp????
+                    video_timestamp = extract_timestamp_from_image()
+                    if video_timestamp:
+                        new_filename = f"{base_timestamp}_{video_timestamp}_{slug}.png"
+                    else:
+                        new_filename = f"{base_timestamp}_{slug}.png"
+                    new_path = os.path.join(image_dir, new_filename)
+
+                    os.rename(temp_path, new_path)
+                    logging.info(f"Renamed screenshot to {new_path}")
+
+                    capture_screenshot(driver, new_path)
+                    logging.info(f"Captured image for {vid_id} saved to {new_path}")
+                    image_hook(new_path)
                 except Exception as e:
                     logging.error(f"Error processing video {vid_id}: {e}")
 
