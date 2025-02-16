@@ -74,9 +74,6 @@ if "state_dict" in checkpoint:
 # Load the checkpoint into the model
 model.load_state_dict(checkpoint, strict=False)  # strict=False allows missing keys
 
-# Move model to GPU if available
-device = "cuda" if torch.cuda.is_available() else "cpu"
-
 model = model.to(device)
 model.eval()
 
