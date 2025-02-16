@@ -1,9 +1,19 @@
 # Cerebro
 
 ## How it works
-TL;DR: We trained a CLIP-style ViT model on a large dataset of 3M image-text pairs and then specialized wildlife photos. We use its embeddings for cosine similarity between the user's text input and the wildlife photos.
+TL;DR: We trained our own [CLIP](https://openai.com/index/clip/)-style ViT model on a large dataset of 3M image-text pairs and then specialized wildlife photos. We use its embeddings for cosine similarity between the user's text input and the wildlife photos.
 
-## Training
+An embedding is a high-dimensional vector representation of something (a text or an image); the closer two vectors are, the more semantically similar they are. Eg. if you subtract the embedding of "mother" from the embedding of "father", you get a vector that is similar to the vector of "parents". This means that we can use cosine similarity to determine the similarity between two embeddings.
+
+CLIP has two neural networks: one for images (in this case, a vision transformer) and one for text (a transformer, like GPT).
+
+Given an image, the image encoder produces an embedding representing its visual features. Given a text string, the text encoder generates a corresponding embedding that captures its semantic meaning.
+
+We scrape wildlife images, and for each image, we precompute its embedding and store it. When a user inputs a text query, it is converted into an embedding using the text encoder. Then, we calculate the cosine similarity between the text embedding and each image embedding.
+
+The image with the highest cosine similarity (i.e., the smallest angle between the vectors in embedding space) is selected as the best match. This shared embedding space allows CLIP to generalize well to unseen image-text pairs, making it highly effective for zero-shot learning and retrieval tasks like ours.
+
+## Training Scheme
 We trained on 4x Nvidia RTX4090 with a VIT-B-32 model (~151m params). 
 
 Our training scheme is as follows:
